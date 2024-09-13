@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Squirrel Finder</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #0A0A0A;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background-color: #0A0A0A;
+        }
+        #instructions {
+            color: #FFFF00;
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+            text-align: center;
+            margin-top: 50px;
+        }
+        #instructions p {
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <div id="instructions" style="display: none;">
+        <p>게임 설명:</p>
+        <p>당신은 코알라입니다. 화살표 키를 사용하여 빠르게 이동하세요.</p>
+        <p>딸기를 피하세요. 부딪히면 게임이 종료됩니다.</p>
+        <p>3초 후에 다람쥐가 나타납니다.</p>
+        <p>다람쥐를 잡으면 승리합니다!</p>
+        <p>아무 키나 눌러서 시작하세요.</p>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const SCREEN_WIDTH = canvas.width;
+        const SCREEN_HEIGHT = canvas.height;
+
+        // 색상 설정
+        const DARK_BG = '#0A0A0A';
+        const RETRO_COLOR = '#FFFF00';
+
+        // 이미지 로드
+        const koalaImage = new Image();
+        koalaImage.src = 'koala.png';
+
+        const strawberryImage = new Image();
+        strawberryImage.src = 'strawberry.png';
+
+        const squirrelImage = new Image();
+        squirrelImage.src = 'squirrel.png';
+
+        // 게임 변수 설정
+        let player = { x: SCREEN_WIDTH / 2 - 20, y: SCREEN_HEIGHT / 2 - 20, width: 40, height: 40, speed: 7 };
+        let strawberries = [];
+        let squirrel = null;
+        let startTime;
+        let gameOver = false;
+        let win = false;
+
+        let keysPressed = {};
+
+        // 이미지 로드 확인
+        let imagesLoaded = 0;
+        let totalImages = 3;
+
+        koalaImage.onload = imageLoaded;
+        strawberryImage.onload = imageLoaded;
+        squirrelImage.onload = imageLoaded;
+
+        function imageLoaded() {
+            imagesLoaded++;
+            if (imagesLoaded === totalImages) {
+                displayInstructions();
+            }
+        }
+
+        function displayInstructions() {
+            document.getElementById('instructions').style.display = 'block';
+            document.addEventListener('keydown', startGame);
+        }
+
+        function startGame() {
+            document.getElementById('instructions').style.display = 'none';
+            document.removeEventListener('keydown', startGame);
+            startTime = Date.now();
+            gameLoop();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            if (!gameOver) {
+                requestAnimationFrame(gameLoop);
+            } else {
+                setTimeout(() => {
+                    resetGame();
+                    gameLoop();
+                }, 2000);
+            }
+        }
+
+        function update() {
+            // 이동 처리
+            if (keysPressed['ArrowLeft']) {
+                player.x -= player.speed;
+            }
+            if (keysPressed['ArrowRight']) {
+                player.x += player.speed;
+            }
+            if (keysPressed['ArrowUp']) {
+                player.y -= player.speed;
+            }
+            if (keysPressed['ArrowDown']) {
+                player.y += player.speed;
+            }
+
+            // 화면 경계 유지
+            player.x = Math.max(0, Math.min(player.x, SCREEN_WIDTH - player.width));
+            player.y = Math.max(0, Math.min(player.y, SCREEN_HEIGHT - player.height));
+
+            // 타이머 설정
+            let elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+
+            // 딸기 생성
+            if (elapsedTime >= strawberries.length + 1) {
+                let s = {
+                    x: Math.random() * (SCREEN_WIDTH - 40),
+                    y: Math.random() * (SCREEN_HEIGHT - 40),
+                    width: 40,
+                    height: 40,
+                    speedX: Math.random() < 0.5 ? -3 : 3,
+                    speedY: Math.random() < 0.5 ? -3 : 3
+                };
+                strawberries.push(s);
+            }
+
+            // 3초 후 다람쥐 생성
+            if (!squirrel && elapsedTime >= 3) {
+                squirrel = {
+                    x: Math.random() * (SCREEN_WIDTH - 40),
+                    y: Math.random() * (SCREEN_HEIGHT - 40),
+                    width: 40,
+                    height: 40,
+                    speedX: Math.random() < 0.5 ? -4 : 4,
+                    speedY: Math.random() < 0.5 ? -4 : 4
+                };
+            }
+
+            // 딸기 이동
+            strawberries.forEach(s => {
+                s.x += s.speedX;
+                s.y += s.speedY;
+                if (s.x <= 0 || s.x >= SCREEN_WIDTH - s.width) {
+                    s.speedX *= -1;
+                }
+                if (s.y <= 0 || s.y >= SCREEN_HEIGHT - s.height) {
+                    s.speedY *= -1;
+                }
+            });
+
+            // 다람쥐 이동
+            if (squirrel) {
+                squirrel.x += squirrel.speedX;
+                squirrel.y += squirrel.speedY;
+                if (squirrel.x <= 0 || squirrel.x >= SCREEN_WIDTH - squirrel.width) {
+                    squirrel.speedX *= -1;
+                }
+                if (squirrel.y <= 0 || squirrel.y >= SCREEN_HEIGHT - squirrel.height) {
+                    squirrel.speedY *= -1;
+                }
+            }
+
+            // 딸기 충돌 검사
+            strawberries.forEach(s => {
+                if (rectsCollide(player, s)) {
+                    gameOver = true;
+                    win = false;
+                }
+            });
+
+            // 다람쥐 충돌 검사
+            if (squirrel && rectsCollide(player, squirrel)) {
+                gameOver = true;
+                win = true;
+            }
+        }
+
+        function draw() {
+            // 화면 초기화
+            ctx.fillStyle = DARK_BG;
+            ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+            // 플레이어 그리기
+            ctx.drawImage(koalaImage, player.x, player.y, player.width, player.height);
+
+            // 딸기 그리기
+            strawberries.forEach(s => {
+                ctx.drawImage(strawberryImage, s.x, s.y, s.width, s.height);
+            });
+
+            // 다람쥐 그리기
+            if (squirrel) {
+                ctx.drawImage(squirrelImage, squirrel.x, squirrel.y, squirrel.width, squirrel.height);
+            }
+
+            // "openai" 텍스트
+            ctx.fillStyle = RETRO_COLOR;
+            ctx.font = '24px Arial';
+            let openaiText = 'openai';
+            let textWidth = ctx.measureText(openaiText).width;
+            ctx.fillText(openaiText, SCREEN_WIDTH / 2 - textWidth / 2, 30);
+
+            // 타이머 표시
+            let elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+            let timerText = `Time: ${elapsedTime}`;
+            ctx.fillText(timerText, 10, 30);
+
+            // 게임 종료 메시지
+            if (gameOver) {
+                ctx.fillStyle = RETRO_COLOR;
+                ctx.font = '48px Arial';
+                let message = win ? 'You Win!' : 'You Lose!';
+                let messageWidth = ctx.measureText(message).width;
+                ctx.fillText(message, SCREEN_WIDTH / 2 - messageWidth / 2, SCREEN_HEIGHT / 2);
+            }
+        }
+
+        function rectsCollide(a, b) {
+            return a.x < b.x + b.width &&
+                   a.x + a.width > b.x &&
+                   a.y < b.y + b.height &&
+                   a.y + a.height > b.y;
+        }
+
+        function resetGame() {
+            player.x = SCREEN_WIDTH / 2 - 20;
+            player.y = SCREEN_HEIGHT / 2 - 20;
+            strawberries = [];
+            squirrel = null;
+            startTime = Date.now();
+            gameOver = false;
+            win = false;
+        }
+
+        // 키 입력 처리
+        window.addEventListener('keydown', function(e) {
+            keysPressed[e.key] = true;
+        });
+
+        window.addEventListener('keyup', function(e) {
+            keysPressed[e.key] = false;
+        });
+    </script>
+</body>
+</html>
